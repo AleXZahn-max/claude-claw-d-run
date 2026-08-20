@@ -22,6 +22,8 @@ const { makeBot } = require('./_bot');
 const FAKE_ROWS = [
     { name: 'kayza', skin: 'coral', score: 48210, distance: 21455, biome: 'production', at: Date.now() - 40e3 },
     { name: 'clawd', skin: 'phosphor', score: 39902, distance: 17800, biome: 'the long tail', at: Date.now() - 9e5 },
+    // A GitHub login at nearly full length, because the board has to survive one.
+    { name: 'the-longest-github-login-you-can-have', skin: 'ice', score: 33100, distance: 15010, biome: 'code review', at: Date.now() - 2e6 },
     { name: 'anon-crab-47', skin: 'amber', score: 31544, distance: 14002, biome: 'code review', at: Date.now() - 3.2e6 },
     { name: 'segfault-sally', skin: 'ice', score: 22870, distance: 10233, biome: 'staging', at: Date.now() - 7e6 },
     { name: 'verifier', skin: 'plasma', score: 18004, distance: 8110, biome: 'staging', at: Date.now() - 2e7 },
@@ -30,11 +32,31 @@ const FAKE_ROWS = [
     { name: 'printf-debug', skin: 'bone', score: 812, distance: 402, biome: 'the happy path', at: 0 },
 ];
 
-function build({ named = true } = {}) {
+/** What /api/me answers for a visitor with no session, where the app does exist. */
+const ME_ANON = { signedIn: false, provider: 'github', available: true };
+/** And for one with a session. */
+const ME_MEMBER = {
+    signedIn: true, provider: 'github', available: true, login: 'kayza', skin: 'coral',
+};
+
+/**
+ * `me` answers the identity probe the Game fires the moment it is constructed.
+ * Left null, nothing answers it and the game settles on 'offline' — which is the
+ * right default here, and is also what a file:// visitor sees.
+ *
+ * The probe is a promise, so a screen drawn in the same tick as construction is
+ * drawn before the answer lands. Scenes that care await `settle()` first.
+ */
+function build({ named = true, me = null } = {}) {
     const { sandbox } = freshGame(['leaderboard.js']);
 
     // No network in here. The board client is supposed to survive that, so let it.
-    sandbox.fetch = () => Promise.reject(new Error('no network in the dump tool'));
+    sandbox.fetch = (url) => {
+        if (me && String(url).startsWith('/api/me')) {
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(me) });
+        }
+        return Promise.reject(new Error('no network in the dump tool'));
+    };
 
     if (named) sandbox.PROFILE.save('kayza', 'coral');
 
@@ -45,6 +67,8 @@ function build({ named = true } = {}) {
 
 function run(game, n) { for (let i = 0; i < n; i++) game.step(); }
 function bootTo(game) { let g = 0; while (game.state === 'boot' && g++ < 4000) game.step(); }
+/** Lets the VM's microtasks drain, so a pending probe has answered. */
+const settle = () => new Promise((r) => setImmediate(r));
 
 /** A keydown the profile screen will accept. */
 const key = (k) => ({ key: k, preventDefault() {}, ctrlKey: false, metaKey: false, altKey: false });
@@ -119,6 +143,39 @@ const SCREENS = {
         show(game, 'MENU · with a best score');
     },
 
+    /** Not signed in, on a deploy that can sign you in: the invitation shows. */
+    async menuAnon() {
+        const { game } = build({ me: ME_ANON });
+        bootTo(game);
+        await settle();
+        run(game, 140);
+        show(game, 'MENU · anonymous, github available');
+    },
+
+    /** Signed in: the name carries a badge and the invitation is gone. */
+    async menuMember() {
+        const { game } = build({ named: false, me: ME_MEMBER });
+        bootTo(game);
+        await settle();
+        game.best = 48210;
+        run(game, 140);
+        show(game, 'MENU · signed in');
+    },
+
+    /**
+     * The profile screen for a signed-in player. The one screen the two identities
+     * disagree about most: no text field, no character count, a sign-out instead.
+     */
+    async profileMember() {
+        const { game } = build({ named: false, me: ME_MEMBER });
+        bootTo(game);
+        await settle();
+        game.openProfile();
+        for (let i = 0; i < 3; i++) game.cycleSkin(1);
+        run(game, 30);
+        show(game, `PROFILE · signed in · skin ${game.draftSkin}`);
+    },
+
     playing() {
         const { sandbox, game } = build();
         bootTo(game);
@@ -153,7 +210,7 @@ const SCREENS = {
 
     /** The same screen with a database behind it. */
     async boardOnline() {
-        const { sandbox, game } = build();
+        const { sandbox, game } = build({ me: ME_ANON });
         bootTo(game);
         sandbox.fetch = () => Promise.resolve({
             ok: true,
@@ -240,6 +297,22 @@ const SCREENS = {
         game.submit = { state: 'ranked', rank: 1, reason: '', ephemeral: true };
         run(game, 60);
         show(game, 'DEAD · no database wired up');
+    },
+
+    /**
+     * Death with nobody to file the run under. The one death panel a first-time
+     * visitor sees, so the invitation on it matters more than any of the others.
+     */
+    async deadAnon() {
+        const { sandbox, game } = build({ me: ME_ANON });
+        bootTo(game);
+        await settle();
+        const bot = makeBot(sandbox);
+        game.startRun(0x1234567);
+        for (let i = 0; i < 9000 && game.state === 'playing'; i++) { bot(game, i < 2000); game.step(); }
+        game.submit = { state: 'anon', rank: -1, reason: '', available: true };
+        run(game, 60);
+        show(game, 'DEAD · not signed in');
     },
 };
 

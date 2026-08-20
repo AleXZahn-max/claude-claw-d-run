@@ -99,6 +99,20 @@ class Game {
         this.skinIndex = Math.max(0, GLYPHS.SKIN_IDS.indexOf(PROFILE.skin));
         this.submit = { state: 'idle', rank: -1, reason: '' };
 
+        /*
+         * Who we are is asked for, not waited for.
+         *
+         * The probe is one request and the boot sequence runs straight through it.
+         * If it comes back saying we are somebody, the name and the crab change
+         * underneath a screen that is already up — which is the right way round.
+         * A runner that shows a spinner before you can jump has traded the thing
+         * it is good at for the thing it is merely correct about.
+         */
+        this.notice = AUTH.notice;
+        this.signOutAt = 0;
+        this.authLabel = '';
+        AUTH.probe().then(() => this.applyIdentity());
+
         this.reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         if (this.reduceMotion) {
             this.term.effects = false;
@@ -201,6 +215,10 @@ class Game {
         // The board used to be reachable only by pressing L, which on a phone is
         // not reachable at all. A leaderboard nobody can open is not one.
         on('boardBtn', () => this.toggleBoard());
+        // Sign-in lives in the titlebar rather than on a game screen because it is
+        // the one control that has to be reachable from every screen, on a phone,
+        // including the first-run one where the keyboard is busy being a keyboard.
+        on('authBtn', () => this.authClick());
 
         this.bindHandleField();
 
@@ -273,6 +291,8 @@ class Game {
                 if (!PROFILE.isNew) { this.state = STATE.MENU; this.sound.playClick(); }
                 return;
             }
+            // Up is sign-in, the same as it is when the field is not focused.
+            if (e.key === 'ArrowUp') { e.preventDefault(); this.authClick(); return; }
             // Left and right belong to the colour picker on this screen, which the
             // panel says out loud. A fourteen-character field does not need a
             // caret you can walk, and backspace still edits.
@@ -300,6 +320,10 @@ class Game {
     bindInput() {
         const JUMP = new Set(['Space', 'ArrowUp', 'KeyW', 'Enter']);
         const DUCK = new Set(['ArrowDown', 'KeyS']);
+        // Where `g` means github. Every screen that mentions it, and no others:
+        // not the profile screen, where every letter belongs to the handle field,
+        // and not mid-run, where it would navigate away from a live game.
+        const SIGNABLE = new Set([STATE.MENU, STATE.DEAD, STATE.BOARD]);
 
         window.addEventListener('keydown', (e) => {
             if (e.repeat && !DUCK.has(e.code)) return;
@@ -337,6 +361,9 @@ class Game {
             }
             if (e.code === 'KeyL' && (this.state === STATE.MENU || this.state === STATE.DEAD)) {
                 this.toggleBoard(); return;
+            }
+            if (e.code === 'KeyG' && SIGNABLE.has(this.state)) {
+                this.authClick(); return;
             }
             if (e.code === 'KeyT') { this.toggleTheme(); return; }
             if (e.code === 'KeyM') { this.toggleMute(); return; }
@@ -436,6 +463,9 @@ class Game {
         this.resetRun();
         this.state = STATE.PLAYING;
         this.submit = { state: 'idle', rank: -1, reason: '' };
+        // Whatever the sign-in had to say has been on screen since the menu. It has
+        // no business over a run.
+        this.notice = '';
         this.sound.clearFilter();
         this.sound.playClick();
         this.setStatusButtons();
@@ -482,6 +512,87 @@ class Game {
      * Profile — handle and crab colour
      * ================================================================== */
 
+    /* ================================================================== *
+     * Identity
+     * ================================================================== */
+
+    /**
+     * Reconciles the game with whatever the sign-in probe found.
+     *
+     * Called after the probe and after every sign-in and sign-out, because all
+     * three can change the player's name and their crab while a screen is already
+     * on the glass. One function so the three paths cannot drift apart.
+     */
+    applyIdentity() {
+        if (AUTH.member) {
+            PROFILE.adopt(AUTH.login, AUTH.skin);
+            // A signed-in player is never new, so a first-run screen asking for a
+            // handle is now asking for nothing. Let them out of it.
+            if (this.state === STATE.PROFILE) this.state = STATE.MENU;
+        } else if (PROFILE.isGithub) {
+            // Signed out: hand back whatever this browser called itself before.
+            PROFILE.release();
+        }
+
+        this.draft = PROFILE.name;
+        this.skinIndex = Math.max(0, GLYPHS.SKIN_IDS.indexOf(PROFILE.skin));
+        if (AUTH.notice) {
+            this.notice = AUTH.notice;
+            AUTH.notice = '';
+        }
+        this.signOutAt = 0;
+    }
+
+    /** The titlebar button. Signs in, or arms and then confirms a sign-out. */
+    authClick() {
+        if (!AUTH.member) {
+            if (!AUTH.available) {
+                this.notice = 'this deploy has no github app wired up';
+                this.sound.playClick();
+                return;
+            }
+            this.sound.playClick();
+            AUTH.signIn();     // leaves the page
+            return;
+        }
+
+        // Two taps to sign out. One tap is a misclick, and a misclick that signs
+        // you out of the board you were reading is a bad trade for one saved tap.
+        if (this.signOutAt && this.tick - this.signOutAt < 300) {
+            this.signOutAt = 0;
+            this.sound.playClick();
+            AUTH.signOut().then(() => this.applyIdentity());
+            return;
+        }
+        this.signOutAt = this.tick;
+        this.sound.playClick();
+    }
+
+    /**
+     * Keeps the titlebar button labelled with the truth.
+     *
+     * Called from `draw`, every frame, which is affordable because it writes to the
+     * DOM only when the label actually changes — and it has to be every frame,
+     * since the armed sign-out expires on a tick rather than on an event.
+     */
+    syncAuthButton() {
+        const el = document.getElementById('authBtn');
+        if (!el) return;
+
+        let label;
+        if (AUTH.state === 'unknown') label = '…';
+        else if (!AUTH.member) label = AUTH.available ? 'sign in' : 'guest';
+        else if (this.signOutAt && this.tick - this.signOutAt < 300) label = 'sign out?';
+        else label = `@${AUTH.login}`;
+
+        if (label !== this.authLabel) {
+            this.authLabel = label;
+            el.textContent = label;
+            el.classList.toggle('chrome-btn--on', AUTH.member && label[0] === '@');
+            el.disabled = AUTH.state === 'unknown';
+        }
+    }
+
     openProfile() {
         this.draft = PROFILE.name;
         this.skinIndex = Math.max(0, GLYPHS.SKIN_IDS.indexOf(PROFILE.skin));
@@ -506,9 +617,12 @@ class Game {
     commitProfile() {
         // Enter on an empty field is a legitimate answer — plenty of people do not
         // want to name themselves to play a browser game, and they still deserve
-        // a row on the board. It just comes pre-filled.
+        // a board of their own. It just comes pre-filled.
         PROFILE.save(this.draft || suggestHandle(), this.draftSkin);
         this.draft = PROFILE.name;
+        // Signed in, the colour belongs to the account rather than to this browser,
+        // so it goes to the server and is waiting on your phone.
+        if (AUTH.member) AUTH.saveSkin(PROFILE.skin);
         this.state = STATE.MENU;
         this.sound.playMilestone();
     }
@@ -521,6 +635,10 @@ class Game {
             if (!PROFILE.isNew) { this.state = STATE.MENU; this.sound.playClick(); }
             return;
         }
+        // Up is sign-in on this screen. It has to be a non-printable key: every
+        // letter on this screen belongs to the handle field, so there is no room
+        // for a mnemonic like "g".
+        if (k === 'ArrowUp') { e.preventDefault(); this.authClick(); return; }
         if (k === 'Backspace') { e.preventDefault(); this.draft = this.draft.slice(0, -1); return; }
         if (k === 'ArrowLeft') { e.preventDefault(); this.cycleSkin(-1); return; }
         if (k === 'ArrowRight' || k === 'Tab') { e.preventDefault(); this.cycleSkin(1); return; }
@@ -612,7 +730,7 @@ class Game {
             this.submit = { state: 'skipped', rank: -1, reason: '' };
             return;
         }
-        this.submit = { state: 'sending', rank: -1, reason: '' };
+
         const run = {
             v: RULES_VERSION,
             name: PROFILE.name,
@@ -624,8 +742,22 @@ class Game {
             steps: this.runStep,
             trace: encodeTrace(this.trace),
         };
+
+        /*
+         * Known to be anonymous: keep the run on the local board and say so, with
+         * no round trip that could only come back 401. The invitation to sign in is
+         * worth more when it arrives instantly than when it arrives as a rejection.
+         */
+        if (AUTH.state === 'anon') {
+            BOARD.writeLocal(run);
+            this.submit = { state: 'anon', rank: -1, reason: '', available: AUTH.available };
+            return;
+        }
+
+        this.submit = { state: 'sending', rank: -1, reason: '' };
         BOARD.submit(run).then((r) => {
             if (r.ok) this.submit = { state: 'ranked', rank: r.rank, reason: '', ephemeral: !!r.ephemeral };
+            else if (r.needsAuth) this.submit = { state: 'anon', rank: -1, reason: '', available: r.available };
             else if (r.local) this.submit = { state: 'local', rank: -1, reason: '' };
             else this.submit = { state: 'rejected', rank: -1, reason: r.reason || 'rejected' };
         });
@@ -844,6 +976,7 @@ class Game {
         const t = this.term;
         t.clear();
         this.syncTouchUi();
+        this.syncAuthButton();
 
         if (this.state === STATE.BOOT) {
             this.drawBoot();
@@ -946,7 +1079,11 @@ class Game {
                 break;
             case STATE.PROFILE:
                 mode = ' SETUP '; modeColor = 'cyan';
-                hint = 'type  handle    ← →  colour    enter  save';
+                // Signed in there is no handle to type, so the statusline must not
+                // offer it. A hint for a key that does nothing is worse than none.
+                hint = PROFILE.isGithub
+                    ? '← →  colour    enter  done    ↑  sign out'
+                    : 'type  handle    ← →  colour    enter  save';
                 break;
             case STATE.BOARD:
                 mode = ' BOARD '; modeColor = 'amber';
@@ -1038,7 +1175,11 @@ class Game {
         // that makes the board feel like it has your name on it before you start.
         const handle = PROFILE.name || 'unnamed';
         const label = 'running as';
-        const wide = label.length + 8 + handle.length;
+        // A signed-in name is a claim the server will back, so it gets said out
+        // loud. It is also the only visible difference between a name that owns its
+        // row on the board and a name that is just a word this browser remembers.
+        const badge = PROFILE.isGithub ? '  ✓ github' : '';
+        const wide = label.length + 8 + handle.length + badge.length;
         const cx = Math.round((GEO.cols - wide) / 2);
         t.clearRect(cx - 2, 11, wide + 4, 1);
         t.text(cx, 11, label, 'dim');
@@ -1046,6 +1187,7 @@ class Game {
             t.blit(GLYPHS.CLAWD.mini, cx + label.length + 2, 11, { tint: 'claw' });
         });
         t.text(cx + label.length + 8, 11, handle, 'fg');
+        if (badge) t.text(cx + label.length + 8 + handle.length, 11, badge, 'ok', 0.85);
 
         const blink = Math.sin(this.tick * 0.09) > -0.3;
         const cta = 'press  space  to run';
@@ -1069,6 +1211,26 @@ class Game {
         if (this.best > 0) {
             t.centeredHalo(20, `best  ${fmt(this.best)}`, 'amber', 0.8);
         }
+
+        /*
+         * The bottom line: either what just happened to your sign-in, or the reason
+         * to bother with one.
+         *
+         * It sits under the rules rather than over the title because it is the least
+         * urgent thing on the screen. Nobody arrives at a runner wanting to log in,
+         * so the invitation waits until after the part that explains how to jump.
+         */
+        let line = '', tone = 'fgDim';
+        if (this.notice) {
+            line = this.notice;
+            tone = 'cyan';
+        } else if (!AUTH.member && AUTH.available) {
+            line = 'g   sign in with github to claim a row on the global board';
+        } else if (AUTH.state === 'offline') {
+            line = 'offline — runs are kept in this browser';
+            tone = 'dim';
+        }
+        if (line) t.centeredHalo(22, line, tone, 0.9);
     }
 
     /* ---------------- profile ---------------- */
@@ -1091,21 +1253,44 @@ class Game {
 
         t.box(x, y, w, h, {
             style: 'round', color: 'cyan',
-            title: PROFILE.isNew ? 'first run' : 'your crab', titleColor: 'cyanHot',
+            title: PROFILE.isGithub ? 'your crab' : PROFILE.isNew ? 'first run' : 'your crab',
+            titleColor: 'cyanHot',
         });
 
-        // The handle, asked the way the boot sequence would ask it.
+        /*
+         * The top block asks a different question depending on who is asking it.
+         *
+         * Signed in, the name is not a question at all — it came from GitHub and the
+         * server will not accept any other, so offering a text field here would be
+         * offering to edit something that cannot be edited. It is stated instead.
+         */
         t.text(ix, y + 2, '$ whoami', 'fgDim');
         t.put(ix, y + 3, '›', 'cyan');
-        t.text(ix + 2, y + 3, this.draft, 'fg');
-        const caret = Math.sin(this.tick * 0.12) > -0.2 ? '█' : ' ';
-        t.put(ix + 2 + this.draft.length, y + 3, caret, 'clawHot', 0.9);
 
-        const room = HANDLE_MAX - this.draft.length;
-        const note = this.draft
-            ? `${room} character${room === 1 ? '' : 's'} left`
-            : 'enter picks one for you';
-        t.text(ix, y + 4, note, 'dim');
+        if (PROFILE.isGithub) {
+            t.text(ix + 2, y + 3, PROFILE.name, 'fg');
+            t.text(ix + 2 + PROFILE.name.length + 2, y + 3, '✓ github', 'ok');
+            t.text(ix, y + 4, 'this name is yours — nobody else can take it', 'dim');
+            t.text(ix, y + 5, '↑   sign out', 'fgDim');
+        } else {
+            t.text(ix + 2, y + 3, this.draft, 'fg');
+            const caret = Math.sin(this.tick * 0.12) > -0.2 ? '█' : ' ';
+            t.put(ix + 2 + this.draft.length, y + 3, caret, 'clawHot', 0.9);
+
+            const room = HANDLE_MAX - this.draft.length;
+            const note = this.draft
+                ? `${room} character${room === 1 ? '' : 's'} left`
+                : 'enter picks one for you';
+            t.text(ix, y + 4, note, 'dim');
+
+            // The one place worth being blunt about what a typed name is worth. A
+            // player who reads this and shrugs has lost nothing; a player who wanted
+            // their score to be theirs now knows what to press.
+            if (AUTH.available) {
+                t.text(ix, y + 5, '↑', 'cyan');
+                t.text(ix + 4, y + 5, 'sign in with github for the global board', 'fgDim');
+            }
+        }
 
         t.hline(x + 2, y + 6, w - 4, '─', 'dimmer');
 
@@ -1133,6 +1318,9 @@ class Game {
         t.text(px + 3, y + 10, pick, 'clawHot');
         t.text(px + 3 + pick.length + 2, y + 10, '›', 'cyan');
         t.text(px, y + 11, skin.note, 'dim');
+        // Signed in, the colour is account-shaped rather than device-shaped, and
+        // saying so is the difference between a setting and a possession.
+        if (PROFILE.isGithub) t.text(px, y + 12, 'saved to your account', 'ok', 0.7);
 
         // Position in the set, as dots. Eight skins is few enough to show them all.
         GLYPHS.SKIN_IDS.forEach((id, i) => {
@@ -1146,7 +1334,8 @@ class Game {
         // Enter lands on the menu either way — never straight into a run — so it
         // must not say "start running". The menu is where the controls are, which
         // is exactly what a first-time visitor is about to need.
-        t.text(ix, y + 16, PROFILE.isNew ? "enter  that's me" : 'enter  save', 'fg');
+        t.text(ix, y + 16, PROFILE.isGithub ? 'enter  done'
+            : PROFILE.isNew ? "enter  that's me" : 'enter  save', 'fg');
         t.text(ix + 24, y + 16, '← →  colour', 'fgDim');
         if (!PROFILE.isNew) t.text(ix + 39, y + 16, 'esc  back', 'dim');
     }
@@ -1189,9 +1378,14 @@ class Game {
             t.text(ix, y + 7, 'be the first — press esc, then space.', 'fgDim');
         }
 
+        // Recomputed per frame rather than read from BOARD.mine, because signing
+        // out while this screen is open changes the answer and nothing refetches.
+        // The rule for what counts as "yours" lives in BOARD.myRow().
+        const myRow = BOARD.myRow();
+
         rows.slice(0, 10).forEach((r, i) => {
             const ry = y + 4 + i;
-            const mine = r.name === PROFILE.name;
+            const mine = i === myRow;
             const nameColor = mine ? 'clawHot' : 'fg';
             const a = mine ? 1 : 0.86;
 
@@ -1202,7 +1396,15 @@ class Game {
             t.skinned(GLYPHS.skinRecolor(r.skin), () => {
                 t.blit(GLYPHS.CLAWD.mini, ix + 5, ry, { tint: 'claw', alpha: a });
             });
-            t.text(ix + 11, ry, r.name, nameColor, a);
+            // GitHub logins run to 39 characters. The score is right-aligned at
+            // ix+40 and the widest one a run can reach is nine columns, so a name
+            // may have twenty before the two collide. Cut on screen only — the
+            // stored name is whole, and the trailing dash goes with the cut because
+            // "github-…" reads as a name and "github-" reads as a bug.
+            const shown = r.name.length > 20
+                ? `${r.name.slice(0, 19).replace(/-+$/, '')}…`
+                : r.name;
+            t.text(ix + 11, ry, shown, nameColor, a);
             t.textRight(ix + 40, ry, fmt(r.score), mine ? 'amber' : 'fg', a);
             t.textRight(ix + 53, ry, `${fmt(r.distance)} m`, 'fgDim', a);
             t.text(ix + 57, ry, r.biome.slice(0, 15), 'dim', a);
@@ -1213,16 +1415,20 @@ class Game {
 
         // The footnote is the reason the board is worth reading, so it says the
         // true thing for the board you are actually looking at. "Verified on the
-        // server" and "stored somewhere that survives the night" are separate
-        // claims, and only one of them is true on a deploy with no database.
+        // server", "the name is really theirs" and "stored somewhere that survives
+        // the night" are three separate claims, and a deploy can have any subset.
         const footnote = {
-            redis: 'every score here was replayed on the server before it landed',
+            redis: 'every row was replayed on the server, under a github name its owner signed into',
             memory: 'no database on this deploy — verified, but the board resets when the server sleeps',
             local: 'offline — showing runs from this browser only',
         };
         t.text(ix, y + 16, footnote[BOARD.store] || footnote.local, 'dim');
         t.text(ix, y + 17, 'esc  back', 'fg');
         t.text(ix + 13, y + 17, 'r  refresh', 'fgDim');
+        // A stranger's board is a wall. Yours is a scoreboard. Say which one this is.
+        if (!AUTH.member && AUTH.available && BOARD.store !== 'local') {
+            t.text(ix + 28, y + 17, 'g  sign in to join', 'cyan');
+        }
     }
 
     /* ---------------- pause ---------------- */
@@ -1298,10 +1504,22 @@ class Game {
                 word = `${where} on the board · ${PROFILE.name}`;
                 color = 'ok';
             }
+        } else if (s.state === 'anon') {
+            // Nothing went wrong here: the run counted, there is simply no account
+            // to file it under. Phrased as an invitation, in cyan rather than amber,
+            // because a player who is not signed in has not made a mistake.
+            word = 'saved here only — no account behind it yet';
+            color = 'cyan';
         } else if (s.state === 'local') { word = 'saved on this browser · offline'; color = 'fgDim'; }
         else if (s.state === 'rejected') { word = `not accepted — ${s.reason}`; color = 'amber'; }
         else if (s.state === 'skipped') word = `runs under ${TUNING.submitFloor} don't make the board`;
         if (word) t.text(ix, yy + 10, word, color, a);
+        // The offer goes directly under the fact it answers, and only when there is
+        // an OAuth App to send them to — an invitation to a door that does not exist
+        // is worse than no invitation.
+        if (s.state === 'anon' && s.available !== false) {
+            t.text(ix, yy + 11, 'g   sign in with github to join the board', 'fgDim', a * 0.9);
+        }
 
         const cta = 'space  run again';
         const blink = Math.sin(this.tick * 0.09) > -0.3;

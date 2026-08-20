@@ -33,6 +33,9 @@
             <span class="path">~/dev/clawd-run</span>
 
             <div class="chrome-actions">
+                <!-- Reads "…" until /api/me answers, then "sign in", "guest" on a
+                     deploy with no OAuth App, or "@login" once you are somebody. -->
+                <button type="button" id="authBtn" class="chrome-btn">…</button>
                 <button type="button" id="boardBtn" class="chrome-btn">board</button>
                 <button type="button" id="soundBtn" class="chrome-btn">sound: on</button>
                 <button type="button" id="themeBtn" class="chrome-btn">theme: dark</button>
@@ -97,8 +100,10 @@
         colour, then press enter. Press space, up arrow or W to jump. Press down
         arrow or S to duck, or to drop faster while airborne. Collect diamond
         tokens to charge the extended thinking meter, then press shift to slow the
-        world down. Press L for the leaderboard, C to change your crab, P to pause,
-        T to switch theme, M to mute, F to toggle screen effects.
+        world down. Press G to sign in with GitHub, which is what a row on the
+        global leaderboard is filed under. Press L for the leaderboard, C to change
+        your crab, P to pause, T to switch theme, M to mute, F to toggle screen
+        effects.
     </p>
 </div>
 
@@ -111,6 +116,7 @@
 <script src="js/glyphs.js"></script>
 <script src="js/terminal.js"></script>
 <script src="js/profile.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/particles.js"></script>
 <script src="js/entities.js"></script>

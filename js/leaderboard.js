@@ -63,8 +63,23 @@ const BOARD = {
             this.status = 'local';
             this.message = 'offline — showing this browser only';
         }
-        this.mine = this.rows.findIndex((r) => r.name === PROFILE.name);
+        this.mine = this.myRow();
         return this.rows;
+    },
+
+    /**
+     * Which row on screen is this player's, or -1.
+     *
+     * A name match is not enough. On the global board every row is a GitHub login,
+     * so a match only means something if this player *has* one — an anonymous
+     * player who typed `kayza` is not the GitHub kayza, and claiming their row
+     * would be precisely the mix-up that signing in exists to end. On the local
+     * board there is nobody else, so a name match is the whole of the question.
+     */
+    myRow() {
+        if (!PROFILE.name) return -1;
+        if (this.store !== 'local' && !PROFILE.isGithub) return -1;
+        return this.rows.findIndex((r) => r.name === PROFILE.name);
     },
 
     /* ------------------------------------------------------------------ *
@@ -75,6 +90,10 @@ const BOARD = {
      * Sends a finished run. The local board is always written first, so a
      * rejected or unreachable submission still leaves the player with a record
      * of their own best — the run happened either way.
+     *
+     * `run.name` goes along for the local board only. The server does not read it:
+     * it takes the name from the session cookie, which is the whole reason a row on
+     * the global board can be trusted.
      */
     async submit(run) {
         this.writeLocal(run);
@@ -84,10 +103,23 @@ const BOARD = {
             const res = await fetch('/api/submit', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
+                // The session cookie is the submission's identity, so it has to go.
+                credentials: 'same-origin',
                 body: JSON.stringify(run),
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
+                // Not signed in is its own answer, not a rejection. The run was
+                // fine; there is simply no account to file it under, and the death
+                // screen says so in those terms rather than as a refusal.
+                if (res.status === 401 || data.needsAuth) {
+                    return {
+                        ok: false,
+                        needsAuth: true,
+                        available: data.available !== false,
+                        reason: data.reason || 'sign in to use the board',
+                    };
+                }
                 // A rejection is worth surfacing verbatim: "replay mismatch" is
                 // the one message that tells an honest player something is
                 // genuinely wrong rather than that they are being ignored.
@@ -97,6 +129,7 @@ const BOARD = {
             this.store = data.store === 'redis' ? 'redis' : 'memory';
             return {
                 ok: true,
+                name: data.name || run.name,
                 rank: data.rank == null ? -1 : data.rank,
                 best: data.best,
                 ephemeral: this.store !== 'redis',
@@ -157,7 +190,10 @@ function rowOf(run) {
 
 function normaliseRow(r) {
     return {
-        name: normaliseHandle(r.name) || 'anon',
+        // LOGIN_MAX, not HANDLE_MAX: rows on the global board are GitHub logins and
+        // can be up to 39 characters. Clamping them to 14 here would rename people
+        // on the way to the screen. The table truncates for display instead.
+        name: normaliseHandle(r.name, LOGIN_MAX) || 'anon',
         skin: GLYPHS.SKIN_IDS.includes(r.skin) ? r.skin : 'coral',
         score: Math.max(0, Math.floor(Number(r.score) || 0)),
         distance: Math.max(0, Math.floor(Number(r.distance) || 0)),

@@ -6,7 +6,8 @@
     "license": "MIT",
     "scripts": {
         "dev": "vercel dev",
-        "verify": "node tools/verify-replay.js"
+        "verify": "node tools/verify-replay.js",
+        "screens": "node tools/screens.js"
     },
     "engines": {
         "node": ">=18"

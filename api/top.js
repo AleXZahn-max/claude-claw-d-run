@@ -7,6 +7,7 @@
  */
 
 const store = require('./_store');
+const auth = require('./_auth');
 
 module.exports = async function handler(req, res) {
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -28,7 +29,10 @@ module.exports = async function handler(req, res) {
             ? 'no-store'
             : 'public, s-maxage=10, stale-while-revalidate=60');
         const body = { rows, store: kind };
-        if (debug) body.env = store.envReport();
+        if (debug) {
+            body.env = store.envReport();
+            body.auth = auth.authReport();
+        }
         return res.status(200).json(body);
     } catch (e) {
         // The board failing should not look like the game failing. The client has

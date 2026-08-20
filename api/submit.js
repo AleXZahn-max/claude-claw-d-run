@@ -1,18 +1,24 @@
 /**
  * POST /api/submit
  *
- * Takes a finished run and decides whether it happened.
+ * Takes a finished run and decides whether it happened, and whose it was.
  *
  * The order of the checks is deliberate: everything cheap and structural runs
  * first, and the replay — the only expensive thing here — runs last, on a payload
  * that has already been shown to be well-formed and within limits. That is what
  * keeps "verify every score" from also meaning "let anyone spend our CPU".
+ *
+ * The name is never read from the body. It comes from the session cookie, which
+ * means the two questions a leaderboard has to answer — did this run happen, and
+ * is this person who they say they are — are both answered here and neither is
+ * answered by the client.
  */
 
 const store = require('./_store');
+const auth = require('./_auth');
 const { replay } = require('./_replay');
 const { RULES_VERSION, decodeTrace, TRACE_MAX_EVENTS } = require('../js/trace');
-const { normaliseHandle, HANDLE_MAX } = require('../js/profile');
+const GLYPHS = require('../js/glyphs');
 
 /** Wide enough that no honest run hits it, narrow enough to bound the work. */
 const MAX_SCORE = 5000000;
@@ -20,12 +26,6 @@ const MAX_BODY = 200000;
 
 function reject(res, code, reason) {
     return res.status(code).json({ ok: false, reason });
-}
-
-function clientIp(req) {
-    const fwd = req.headers['x-forwarded-for'];
-    if (typeof fwd === 'string' && fwd.length) return fwd.split(',')[0].trim();
-    return req.headers['x-real-ip'] || 'unknown';
 }
 
 module.exports = async function handler(req, res) {
@@ -50,8 +50,24 @@ module.exports = async function handler(req, res) {
         return reject(res, 409, 'game rules changed — reload the page');
     }
 
-    const name = normaliseHandle(run.name);
-    if (!name || name.length > HANDLE_MAX) return reject(res, 400, 'bad handle');
+    /*
+     * Who this is, before anything else expensive.
+     *
+     * One HMAC, no network, and it is the rejection an unsigned-in player is most
+     * likely to hit — so it belongs above the trace decode, not below it. 401 is
+     * the honest code: the run may well be real, we just have nowhere to file it.
+     */
+    const session = auth.readSession(req);
+    if (!session) {
+        return res.status(401).json({
+            ok: false,
+            reason: 'sign in with github to put a run on the board',
+            needsAuth: true,
+            available: auth.configured(),
+        });
+    }
+    const name = auth.normaliseLogin(session.login);
+    if (!name) return reject(res, 401, 'session is not readable — sign in again');
 
     const seed = Number(run.seed) >>> 0;
     if (!seed) return reject(res, 400, 'bad seed');
@@ -68,11 +84,16 @@ module.exports = async function handler(req, res) {
     if (events === null) return reject(res, 400, 'bad trace');
     if (events.length > TRACE_MAX_EVENTS) return reject(res, 413, 'trace too long');
 
-    const skin = typeof run.skin === 'string' ? run.skin.slice(0, 16) : 'coral';
+    // Cosmetic, so a wrong value cannot do harm — but it is stored and then read
+    // back by every client that opens the board, and data that goes into a store
+    // unvalidated comes out of it unvalidated.
+    const skin = GLYPHS.SKIN_IDS.includes(run.skin) ? run.skin : 'coral';
 
     /* ---- rate limit, before any simulation ---- */
 
-    if (!(await store.allow(clientIp(req)))) {
+    // Per account rather than per address now that there is an account. An IP is
+    // shared by a whole office and a whole mobile carrier; a login is one person.
+    if (!(await store.allow(`u:${name}`))) {
         return reject(res, 429, 'too many submissions — try again in a minute');
     }
 
@@ -103,6 +124,9 @@ module.exports = async function handler(req, res) {
         });
         return res.status(200).json({
             ok: true,
+            // The authoritative name, so the death screen credits the run to
+            // whoever the cookie says it was rather than to a client-side guess.
+            name,
             rank: saved.rank,
             best: saved.best,
             improved: saved.improved,

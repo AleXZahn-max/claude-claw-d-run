@@ -16,9 +16,19 @@
  * start, and `store` in every response says so rather than pretending.
  */
 
-const VERSION = 3;
+/*
+ * Bumped to 4 when the board became GitHub-only.
+ *
+ * The v3 board was keyed by whatever handle you typed, which meant two people
+ * could claim one row. v4 rows are keyed by a GitHub login, so they are unique by
+ * construction and nobody has to police them. Those are different kinds of row
+ * and they cannot share a key space — hence a new one rather than a migration.
+ */
+const VERSION = 4;
 const BOARD_KEY = `clawd:board:v${VERSION}`;
 const META_KEY = `clawd:meta:v${VERSION}`;
+/** Per-account settings that should follow you between devices. The shop's future home. */
+const USER_KEY = `clawd:user:v${VERSION}`;
 
 /** Vercel's Upstash integration sets KV_*; a hand-made Upstash DB sets UPSTASH_*. */
 function creds() {
@@ -90,7 +100,7 @@ async function cmd(...args) {
  * The in-memory stand-in
  * ------------------------------------------------------------------ */
 
-const mem = { scores: new Map(), meta: new Map(), hits: new Map() };
+const mem = { scores: new Map(), meta: new Map(), hits: new Map(), users: new Map() };
 
 function memTop(limit) {
     return [...mem.scores.entries()]
@@ -166,6 +176,35 @@ async function record(run) {
     };
 }
 
+/* ------------------------------------------------------------------ *
+ * Account settings
+ *
+ * The part of "you" that is not a score. One hash field per account, holding
+ * whatever should follow you from your laptop to your phone — today that is the
+ * colour of your crab, and when there is a shop it is what you own.
+ *
+ * Keyed by GitHub login, which is why this could not exist before sign-in did: a
+ * typed handle is not something you can safely hang possessions on.
+ * ------------------------------------------------------------------ */
+
+async function profile(login) {
+    if (!configured()) return mem.users.get(login) || null;
+    const raw = await cmd('HGET', USER_KEY, login);
+    if (!raw) return null;
+    try { return JSON.parse(raw) || null; } catch (e) { return null; }
+}
+
+/** Merges rather than replaces, so a client that knows about one field cannot drop the rest. */
+async function saveProfile(login, patch) {
+    const next = { ...(await profile(login)), ...patch, at: Date.now() };
+    if (!configured()) {
+        mem.users.set(login, next);
+        return next;
+    }
+    await cmd('HSET', USER_KEY, login, JSON.stringify(next));
+    return next;
+}
+
 /**
  * A crude fixed-window counter per client. It is not there to stop a determined
  * attacker — the replay check does that — but to keep one loop from spending the
@@ -190,4 +229,4 @@ async function allow(ip, limit = 12, windowSec = 60) {
     }
 }
 
-module.exports = { top, record, allow, configured, envReport, VERSION };
+module.exports = { top, record, allow, profile, saveProfile, configured, envReport, VERSION };

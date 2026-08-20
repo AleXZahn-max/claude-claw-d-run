@@ -164,6 +164,28 @@ body {
     color: var(--coral);
 }
 
+/*
+ * A titlebar button that is currently *true* of you, not just clickable — right
+ * now only the signed-in one. It borrows the coral the game uses for the crab,
+ * so "@yourname" up here reads as the same thing as the name on the board.
+ */
+.chrome-btn--on {
+    color: var(--coral);
+    border-color: var(--coral);
+    background: rgba(217, 119, 87, 0.1);
+}
+
+.chrome-btn--on:hover {
+    background: rgba(217, 119, 87, 0.18);
+}
+
+/* Disabled only while /api/me is still in the air, which is a blink. Kept from
+   looking clickable in that window rather than dimmed into looking broken. */
+.chrome-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 /* --------------------------------------------------------------------------
    Screen
    -------------------------------------------------------------------------- */

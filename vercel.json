@@ -5,6 +5,9 @@
             "includeFiles": "js/**",
             "maxDuration": 15,
             "memory": 1024
+        },
+        "api/me.js": {
+            "includeFiles": "js/**"
         }
     },
     "headers": [

@@ -26,9 +26,17 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-/** Load order matters: the same order index.html uses, minus the board client. */
+/**
+ * Load order matters: the same order index.html uses, minus the board client.
+ *
+ * auth.js is in the list even though a verifier has no session and no browser to
+ * have one in. The engine builds itself around the identity layer — the Game
+ * constructor reads AUTH the moment it exists — so leaving it out would not make
+ * the replay purer, it would make it throw. Inside the sandbox it is inert: its
+ * probe reaches for `fetch`, finds nothing, and settles on 'offline'.
+ */
 const FILES = [
-    'rng.js', 'trace.js', 'glyphs.js', 'terminal.js', 'profile.js',
+    'rng.js', 'trace.js', 'glyphs.js', 'terminal.js', 'profile.js', 'auth.js',
     'audio.js', 'particles.js', 'entities.js', 'game.js',
 ];
 
