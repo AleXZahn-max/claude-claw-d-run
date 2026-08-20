@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="Claude Claw'd Run — an ASCII endless runner about shipping code. Jump the bugs, duck the rate limits, spend your context tokens on extended thinking.">
+<meta name="theme-color" content="#12100E">
+<title>Claude Claw'd Run — an ASCII runner about shipping code</title>
+
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="dark">
+
+<div class="desk">
+    <!-- The whole page is one terminal window; the game's own statusline is its UI. -->
+    <div class="term-window" role="application" aria-label="Claude Claw'd Run">
+
+        <div class="titlebar">
+            <span class="proc"><span class="dot" aria-hidden="true"></span>claude</span>
+            <span class="sep" aria-hidden="true">—</span>
+            <span class="path">~/dev/clawd-run</span>
+
+            <div class="chrome-actions">
+                <button type="button" id="soundBtn" class="chrome-btn">sound: on</button>
+                <button type="button" id="themeBtn" class="chrome-btn">theme: dark</button>
+                <button type="button" id="pauseBtn" class="chrome-btn">pause</button>
+            </div>
+        </div>
+
+        <div class="screen">
+            <canvas id="gameCanvas" width="1120" height="560" tabindex="0"
+                    aria-label="Claw'd the crab runs through a terminal, jumping bugs and ducking rate limits."
+                    role="img"></canvas>
+        </div>
+
+    </div>
+
+    <p class="rotate-note">This board is 112 columns wide — turn your phone sideways.</p>
+
+    <div class="pad" aria-label="Touch controls">
+        <button type="button" id="touchDuck" class="pad-btn">
+            <span class="pad-key">↓</span>
+            <span class="pad-label">duck</span>
+        </button>
+        <button type="button" id="touchThink" class="pad-btn pad-btn--think">
+            <span class="pad-key">◆</span>
+            <span class="pad-label">think</span>
+        </button>
+        <button type="button" id="touchJump" class="pad-btn">
+            <span class="pad-key">↑</span>
+            <span class="pad-label">jump</span>
+        </button>
+    </div>
+
+    <p class="credit">
+        Starring <strong>Claw'd</strong> · every pixel is a character
+    </p>
+</div>
+
+<div class="sr-only">
+    <h1>Claude Claw'd Run</h1>
+    <p>
+        An endless runner rendered as terminal text. Press space, up arrow or W to jump.
+        Press down arrow or S to duck, or to drop faster while airborne. Collect diamond
+        tokens to charge the extended thinking meter, then press shift to slow the world
+        down. Press P to pause, T to switch theme, M to mute, F to toggle screen effects.
+    </p>
+</div>
+
+<noscript>
+    <p class="noscript">This game runs on JavaScript. Enable it to play.</p>
+</noscript>
+
+<script src="js/glyphs.js"></script>
+<script src="js/terminal.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/particles.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
