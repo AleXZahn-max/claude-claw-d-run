@@ -33,6 +33,7 @@
             <span class="path">~/dev/clawd-run</span>
 
             <div class="chrome-actions">
+                <button type="button" id="boardBtn" class="chrome-btn">board</button>
                 <button type="button" id="soundBtn" class="chrome-btn">sound: on</button>
                 <button type="button" id="themeBtn" class="chrome-btn">theme: dark</button>
                 <button type="button" id="pauseBtn" class="chrome-btn">pause</button>
@@ -43,6 +44,25 @@
             <canvas id="gameCanvas" width="1120" height="560" tabindex="0"
                     aria-label="Claw'd the crab runs through a terminal, jumping bugs and ducking rate limits."
                     role="img"></canvas>
+
+            <!--
+              The handle field. It has to be a real input, because a canvas is not
+              a text field and a phone will not raise its keyboard for one — a
+              first-time visitor on a phone would otherwise be looking at a screen
+              that asks them to type with nothing to type on.
+
+              It is offscreen rather than hidden: `display:none` and
+              `visibility:hidden` cannot take focus, and focus is the entire point.
+              What you see is the game drawing `this.draft` as glyphs.
+            -->
+            <label class="sr-only" for="handleInput">Your handle for the leaderboard</label>
+            <input id="handleInput" class="handle-input" type="text" maxlength="14"
+                   autocomplete="off" autocapitalize="off" autocorrect="off"
+                   spellcheck="false" enterkeyhint="go" aria-describedby="handleHint">
+            <span id="handleHint" class="sr-only">
+                Up to 14 characters. Press enter when done, or leave it empty and
+                one will be picked for you.
+            </span>
         </div>
 
     </div>

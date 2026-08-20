@@ -24,7 +24,50 @@ const META_KEY = `clawd:meta:v${VERSION}`;
 function creds() {
     const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-    return url && token ? { url: url.replace(/\/+$/, ''), token } : null;
+    if (url && token) return { url: url.replace(/\/+$/, ''), token };
+
+    /*
+     * Some integrations hand over only the TCP connection string. For Upstash the
+     * REST endpoint is the same host over https and the password is the token, so
+     * a `rediss://default:TOKEN@host:6379` is enough to derive both — which means
+     * the board works with whatever shape the dashboard happened to give you
+     * rather than only the one shape this file was written against.
+     */
+    const conn = process.env.REDIS_URL || process.env.KV_URL;
+    if (conn) {
+        try {
+            const u = new URL(conn);
+            if (u.password && u.hostname.endsWith('.upstash.io')) {
+                return { url: `https://${u.hostname}`, token: u.password };
+            }
+        } catch (e) { /* not a URL; fall through to the memory board */ }
+    }
+    return null;
+}
+
+/**
+ * Which of the names we look for are actually set — names only, never values.
+ * `/api/top?debug=1` reports this, because "the board is not saving" is otherwise
+ * a question you cannot answer from outside the deploy.
+ */
+function envReport() {
+    const names = [
+        'KV_REST_API_URL', 'KV_REST_API_TOKEN',
+        'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
+        'REDIS_URL', 'KV_URL', 'EDGE_CONFIG',
+    ];
+    const present = names.filter((n) => !!process.env[n]);
+    return {
+        configured: configured(),
+        present,
+        // The specific wrong turn worth naming: Edge Config is a read-optimised
+        // config store, not a database. It cannot hold a leaderboard.
+        hint: configured()
+            ? 'redis reachable — the board is persistent'
+            : present.includes('EDGE_CONFIG')
+                ? 'found EDGE_CONFIG only. Edge Config is not a database — create an Upstash Redis store instead'
+                : 'no redis credentials in this environment — add an Upstash Redis store and redeploy',
+    };
 }
 
 const configured = () => creds() !== null;
@@ -147,4 +190,4 @@ async function allow(ip, limit = 12, windowSec = 60) {
     }
 }
 
-module.exports = { top, record, allow, configured, VERSION };
+module.exports = { top, record, allow, configured, envReport, VERSION };

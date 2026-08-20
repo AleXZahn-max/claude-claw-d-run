@@ -198,6 +198,11 @@ class Game {
         on('themeBtn', () => this.toggleTheme());
         on('soundBtn', () => this.toggleMute());
         on('pauseBtn', () => this.togglePause());
+        // The board used to be reachable only by pressing L, which on a phone is
+        // not reachable at all. A leaderboard nobody can open is not one.
+        on('boardBtn', () => this.toggleBoard());
+
+        this.bindHandleField();
 
         const btnJump = document.getElementById('touchJump');
         const btnDuck = document.getElementById('touchDuck');
@@ -219,6 +224,10 @@ class Game {
             e.preventDefault();
             this.sound.resume();
             const r = cv.getBoundingClientRect();
+            // On the handle screen a tap means "let me type", and it has to focus
+            // the field from inside the gesture — iOS only opens its keyboard for
+            // a focus() that a user action caused.
+            if (this.state === STATE.PROFILE) { this.focusHandle(); return; }
             if (this.state !== STATE.PLAYING) { this.primary(); return; }
             if ((e.clientY - r.top) / r.height > 0.62) this.secondary(true);
             else this.primary();
@@ -229,6 +238,59 @@ class Game {
             this.release();
         });
         cv.addEventListener('pointercancel', () => { this.secondary(false); this.release(); });
+    }
+
+    /* ------------------------------------------------------------------ *
+     * The handle field
+     *
+     * A hidden `<input>` is the only way a canvas game can ask for text on a
+     * phone. Everything below keeps it and `this.draft` agreeing, and routes its
+     * two non-text keys — enter and escape — the same way the canvas would.
+     * ------------------------------------------------------------------ */
+
+    bindHandleField() {
+        const inp = document.getElementById('handleInput');
+        this.handleInput = inp || null;
+        if (!inp) return;
+
+        // The field is authoritative while it has focus, but the normaliser is
+        // authoritative over the field: whatever the OS keyboard offers, what
+        // lands in `draft` is what the server would accept, and the field is
+        // written back so the two never disagree.
+        inp.addEventListener('input', () => {
+            const next = normaliseHandle(inp.value).slice(0, HANDLE_MAX);
+            if (next !== inp.value) inp.value = next;
+            if (next !== this.draft) {
+                this.draft = next;
+                this.sound.playBoot(this.draft.length);
+            }
+        });
+
+        inp.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); this.commitProfile(); return; }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                if (!PROFILE.isNew) { this.state = STATE.MENU; this.sound.playClick(); }
+                return;
+            }
+            // Left and right belong to the colour picker on this screen, which the
+            // panel says out loud. A fourteen-character field does not need a
+            // caret you can walk, and backspace still edits.
+            if (e.key === 'ArrowLeft') { e.preventDefault(); this.cycleSkin(-1); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); this.cycleSkin(1); }
+        });
+    }
+
+    focusHandle() {
+        const inp = this.handleInput;
+        if (!inp) return;
+        inp.value = this.draft;
+        try { inp.focus({ preventScroll: true }); } catch (e) { inp.focus(); }
+    }
+
+    blurHandle() {
+        const inp = this.handleInput;
+        if (inp && document.activeElement === inp) inp.blur();
     }
 
     /* ================================================================== *
@@ -243,6 +305,11 @@ class Game {
             if (e.repeat && !DUCK.has(e.code)) return;
             this.sound.resume();
 
+            // The handle field handles its own keys. Without this, typing "k" with
+            // the field focused would reach both it and `profileKey` and land in
+            // the draft twice.
+            if (this.handleInput && e.target === this.handleInput) return;
+
             // The profile screen owns the whole keyboard while it is up — it has
             // a text field, and a text field cannot share letters with hotkeys.
             if (this.state === STATE.PROFILE) { this.profileKey(e); return; }
@@ -256,8 +323,7 @@ class Game {
                 if (e.code === 'KeyR') { e.preventDefault(); this.openBoard(); return; }
                 if (e.code === 'Escape' || e.code === 'KeyL' || JUMP.has(e.code)) {
                     e.preventDefault();
-                    this.state = STATE.MENU;
-                    this.sound.playClick();
+                    this.toggleBoard();
                     return;
                 }
             }
@@ -270,7 +336,7 @@ class Game {
                 this.openProfile(); return;
             }
             if (e.code === 'KeyL' && (this.state === STATE.MENU || this.state === STATE.DEAD)) {
-                this.openBoard(); return;
+                this.toggleBoard(); return;
             }
             if (e.code === 'KeyT') { this.toggleTheme(); return; }
             if (e.code === 'KeyM') { this.toggleMute(); return; }
@@ -313,6 +379,7 @@ class Game {
                 // Skipping the boot sequence lands wherever a fresh visitor
                 // should land: at the "who are you" screen, or straight at the menu.
                 this.state = PROFILE.isNew ? STATE.PROFILE : STATE.MENU;
+                if (this.state === STATE.PROFILE) this.focusHandle();
                 break;
             case STATE.MENU:
                 this.startRun();
@@ -327,10 +394,29 @@ class Game {
             case STATE.DEAD:
                 if (this.deathSteps > 40) this.startRun();
                 break;
+
+            // The two screens below have no keyboard on a phone, so the jump
+            // button has to carry them. Both do the one thing that screen is for.
+            case STATE.PROFILE:
+                this.commitProfile();
+                break;
+            case STATE.BOARD:
+                this.toggleBoard();
+                break;
         }
     }
 
     secondary(down) {
+        // Off the run, duck is the left-hand button on the touch pad, and each
+        // screen that has no keyboard borrows it for its own left-hand action.
+        if (this.state === STATE.PROFILE) {
+            if (down) this.cycleSkin(-1);
+            return;
+        }
+        if (this.state === STATE.BOARD) {
+            if (down) this.toggleBoard();
+            return;
+        }
         if (this.state !== STATE.PLAYING) return;
         this.record(down ? 'd' : 'D');
         const was = this.hero.ducking;
@@ -371,6 +457,10 @@ class Game {
     }
 
     tryThink() {
+        // The think button is the middle of the touch pad; the two keyboard-less
+        // screens borrow it too.
+        if (this.state === STATE.PROFILE) { this.cycleSkin(1); return; }
+        if (this.state === STATE.BOARD) { this.openBoard(); return; }
         if (this.state !== STATE.PLAYING || this.thinking) return;
         this.record('t');
         if (this.think < TUNING.thinkMin) return;
@@ -397,6 +487,9 @@ class Game {
         this.skinIndex = Math.max(0, GLYPHS.SKIN_IDS.indexOf(PROFILE.skin));
         this.state = STATE.PROFILE;
         this.sound.playClick();
+        // Called from a keypress or a click, so this focus is inside a gesture and
+        // a phone will actually raise its keyboard for it.
+        this.focusHandle();
     }
 
     /** The live preview colour, which is the skin under the cursor, not the saved one. */
@@ -452,6 +545,62 @@ class Game {
         this.state = STATE.BOARD;
         this.sound.playClick();
         BOARD.load(10);
+    }
+
+    /**
+     * What the titlebar's "board" button does. It has to work from wherever the
+     * player is, including out of a run — so a run in progress is paused rather
+     * than abandoned, and closing the board puts them back on it.
+     */
+    toggleBoard() {
+        if (this.state === STATE.BOARD) {
+            this.state = this.boardFrom || STATE.MENU;
+            this.boardFrom = null;
+            this.sound.playClick();
+            return;
+        }
+        if (this.state === STATE.BOOT) return;
+        if (this.state === STATE.PROFILE) return;   // finish naming yourself first
+        this.boardFrom = this.state === STATE.PLAYING ? STATE.PAUSED : this.state;
+        if (this.state === STATE.PLAYING) {
+            this.secondary(false);
+            this.release();
+        }
+        this.openBoard();
+    }
+
+    /**
+     * Keeps the DOM chrome telling the truth about the screen underneath it.
+     *
+     * Runs once per state change, from `draw`, rather than at each transition —
+     * `state` is written in eight places and a sync you have to remember to call
+     * is a sync that will be forgotten.
+     */
+    syncTouchUi() {
+        if (this.uiState === this.state) return;
+        this.uiState = this.state;
+
+        if (this.state !== STATE.PROFILE) this.blurHandle();
+
+        const board = document.getElementById('boardBtn');
+        if (board) board.textContent = this.state === STATE.BOARD ? 'back' : 'board';
+
+        // The touch pad is the only control a phone has, so on the two screens
+        // with no keyboard it stops saying "duck / think / jump" and says what it
+        // actually does there.
+        const PADS = {
+            [STATE.PROFILE]: [['‹', 'colour'], ['›', 'colour'], ['✓', "that's me"]],
+            [STATE.BOARD]:   [['‹', 'back'],   ['↻', 'refresh'], ['✓', 'back']],
+        };
+        const pad = PADS[this.state] || [['↓', 'duck'], ['◆', 'think'], ['↑', 'jump']];
+        ['touchDuck', 'touchThink', 'touchJump'].forEach((id, i) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const key = el.querySelector('.pad-key');
+            const label = el.querySelector('.pad-label');
+            if (key) key.textContent = pad[i][0];
+            if (label) label.textContent = pad[i][1];
+        });
     }
 
     /**
@@ -694,6 +843,7 @@ class Game {
     draw() {
         const t = this.term;
         t.clear();
+        this.syncTouchUi();
 
         if (this.state === STATE.BOOT) {
             this.drawBoot();

@@ -56,12 +56,40 @@ project's environment.
 [console.upstash.com](https://console.upstash.com), then add its REST URL and
 token as `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`.
 
+If an integration gives you only a connection string, `REDIS_URL` or `KV_URL`
+in the form `rediss://default:TOKEN@host.upstash.io:6379` works too — the REST
+endpoint is the same host over https and the password is the token, so the code
+derives both from it.
+
 Either way, redeploy once so the functions pick the variables up. The board
 header flips from `this deploy` to `global`, and the footnote under the table
 changes to match. Nothing else needs to change.
 
 The free tier is far more than this needs: a run costs one `ZADD` plus one
 `HSET`, and the board itself is cached for ten seconds at the edge.
+
+> **Not Edge Config.** Vercel's storage menu also offers *Global Config
+> Storage* — that is Edge Config, and it is not a database. It is a
+> read-optimised store for things like feature flags: reads are fast and free,
+> but writes go through the Vercel management API, not through your function.
+> A leaderboard cannot live in it. It sets `EDGE_CONFIG`, which is not a name
+> this code looks for, so picking it leaves the board in memory mode.
+
+### Is the store actually wired up?
+
+`GET /api/top?debug=1` answers it from outside the deploy:
+
+```json
+{ "rows": [], "store": "memory",
+  "env": { "configured": false, "present": ["EDGE_CONFIG"],
+           "hint": "found EDGE_CONFIG only. Edge Config is not a database — …" } }
+```
+
+`store` is the same three-valued answer the game shows: `redis` (persistent),
+`memory` (this instance only), `local` (the API was unreachable, so the board
+you are looking at is your own browser's). `env.present` lists which of the
+names the code looks for are set — **names only, never values**; a token never
+appears in a response.
 
 ### Why not Firebase
 
