@@ -1,0 +1,14 @@
+{
+    "name": "claude-clawd-run",
+    "version": "1.0.0",
+    "private": true,
+    "description": "An ASCII endless runner about shipping code. No build step, no dependencies: the browser loads the same js/ files the leaderboard's replay verifier does.",
+    "license": "MIT",
+    "scripts": {
+        "dev": "vercel dev",
+        "verify": "node tools/verify-replay.js"
+    },
+    "engines": {
+        "node": ">=18"
+    }
+}

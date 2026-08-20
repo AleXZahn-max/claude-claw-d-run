@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    Claw'd, on a grid.
+
+    The game draws every pixel as a character in a monospace cell, so the mark
+    does the same thing: no curves, no gradients, nothing that a terminal could
+    not produce. It is the run sprite at 9x7 cells — claws up, wide-set eyes,
+    four legs — in the coral palette the game ships with (glyphs.js SKINS.coral,
+    dark mode) on the terminal background.
+
+    Everything snaps to a 6px grid so it stays crisp at 16px, where a favicon
+    actually lives. Curves and drop shadows at that size turn into mud, which is
+    what the old one did.
+  -->
+  <style>
+    .claw  { fill: #F6AE90 }  /* clawHot  — pincers catch the light */
+    .shell { fill: #D97757 }  /* base     — Claude's coral */
+    .under { fill: #A9502F }  /* clawDeep — underside and legs */
+    .eye   { fill: #FFF6F0 }  /* eye      — near-white, the only bright thing */
+  </style>
+
+  <rect width="64" height="64" rx="12" fill="#12100E"/>
+  <rect x="1.25" y="1.25" width="61.5" height="61.5" rx="11"
+        fill="none" stroke="#D97757" stroke-width="2.5" stroke-opacity="0.55"/>
+
+  <!-- 9 cols x 7 rows of 6px cells, offset to sit centred and slightly high. -->
+  <g shape-rendering="crispEdges">
+    <!-- row 0 — claw pincers -->
+    <g class="claw"><rect x="5" y="11" width="12" height="6"/><rect x="47" y="11" width="12" height="6"/></g>
+    <!-- row 1 — arms tucking in -->
+    <g class="claw"><rect x="11" y="17" width="6" height="6"/><rect x="47" y="17" width="6" height="6"/></g>
+    <!-- row 2 — top of the shell -->
+    <rect class="shell" x="17" y="23" width="30" height="6"/>
+    <!-- row 3 — face: shell, eye, shell, eye, shell -->
+    <rect class="shell" x="11" y="29" width="6" height="6"/>
+    <rect class="eye"   x="17" y="29" width="6" height="6"/>
+    <rect class="shell" x="23" y="29" width="18" height="6"/>
+    <rect class="eye"   x="41" y="29" width="6" height="6"/>
+    <rect class="shell" x="47" y="29" width="6" height="6"/>
+    <!-- row 4 — widest part of the carapace -->
+    <rect class="shell" x="11" y="35" width="42" height="6"/>
+    <!-- row 5 — underside -->
+    <rect class="under" x="17" y="41" width="30" height="6"/>
+    <!-- row 6 — four legs -->
+    <g class="under">
+      <rect x="11" y="47" width="6" height="6"/><rect x="23" y="47" width="6" height="6"/>
+      <rect x="35" y="47" width="6" height="6"/><rect x="47" y="47" width="6" height="6"/>
+    </g>
+  </g>
+
+  <!-- The CRT the whole game is pretending to be. Every other scanline, barely there. -->
+  <g fill="#12100E" fill-opacity="0.22">
+    <rect x="0" y="12" width="64" height="1"/><rect x="0" y="16" width="64" height="1"/>
+    <rect x="0" y="20" width="64" height="1"/><rect x="0" y="24" width="64" height="1"/>
+    <rect x="0" y="28" width="64" height="1"/><rect x="0" y="32" width="64" height="1"/>
+    <rect x="0" y="36" width="64" height="1"/><rect x="0" y="40" width="64" height="1"/>
+    <rect x="0" y="44" width="64" height="1"/><rect x="0" y="48" width="64" height="1"/>
+    <rect x="0" y="52" width="64" height="1"/>
+  </g>
+</svg>
