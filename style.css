@@ -357,6 +357,31 @@ body[data-theme="light"] .pad-btn--think .pad-key {
     font-weight: 500;
 }
 
+/*
+ * The repo link. Underlined with a dotted rule rather than a solid one, because
+ * the credit line sits at --fg-faint and a solid underline down there reads as a
+ * smudge. It lights up coral on hover, which is the only colour this page uses to
+ * mean "this does something".
+ */
+.credit-link {
+    color: inherit;
+    text-decoration: underline dotted;
+    text-decoration-color: var(--fg-faint);
+    text-underline-offset: 3px;
+    transition: color 0.18s var(--ease), text-decoration-color 0.18s var(--ease);
+}
+
+.credit-link:hover,
+.credit-link:focus-visible {
+    color: var(--coral);
+    text-decoration-color: var(--coral);
+}
+
+.credit-link:focus-visible {
+    outline: 1px solid var(--coral);
+    outline-offset: 3px;
+}
+
 .noscript {
     position: fixed;
     inset: auto 0 0 0;
