@@ -186,6 +186,63 @@ body {
     cursor: default;
 }
 
+/*
+ * The signed-in face, in the titlebar next to the handle.
+ *
+ * A photograph is the one thing on this page that is not made of characters, so
+ * it is kept small, ringed like the coral dot two elements to its left, and put
+ * through the same palette the rest of the frame lives in: contrast pulled in a
+ * touch and the colour warmed, so a bright blue avatar does not become the
+ * loudest thing in a room of two browns and a coral.
+ */
+.chrome-btn--auth {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* Tighter all round once a face is in there. The left padding goes because the
+   ring already reads as an edge; the vertical padding goes because an 18px image
+   in a 12px-text button would otherwise push the whole titlebar taller — the
+   siblings stretch to match it, so the row stays even either way, but the window
+   should not grow a few pixels the moment somebody signs in. Set from syncAvatar
+   rather than :has(), and deliberately kept off .chrome-btn--on so an armed
+   "sign out?" does not make the button twitch. */
+.chrome-btn--face {
+    padding: 0.16rem 0.6rem 0.16rem 0.34rem;
+}
+
+.avatar {
+    display: block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    /* A face that has not arrived yet is one empty terminal cell, not a hole. */
+    background: var(--edge);
+    box-shadow: 0 0 0 1px var(--coral);
+    /* github serves these square; a proxy that says otherwise gets cropped
+       rather than stretched. */
+    object-fit: cover;
+    filter: saturate(0.85) contrast(0.95) sepia(0.08);
+    flex: none;
+    /* The whole button is the target; an image inside one is otherwise a thing you
+       can accidentally drag off instead of click. */
+    pointer-events: none;
+    transition: box-shadow 0.18s var(--ease), filter 0.18s var(--ease);
+}
+
+/* On hover the frame stops holding it back: full colour, brighter ring. */
+.chrome-btn--auth:hover .avatar {
+    box-shadow: 0 0 0 1px var(--coral-lit);
+    filter: none;
+}
+
+/* `[hidden]` is a UA rule, so it ties with `.avatar` on specificity and loses on
+   cascade order. Said here, or the empty ring shows for everyone signed out. */
+.avatar[hidden] {
+    display: none;
+}
+
 /* --------------------------------------------------------------------------
    Screen
    -------------------------------------------------------------------------- */
@@ -334,6 +391,10 @@ body[data-theme="light"] .pad-btn--think .pad-key {
     .sep, .path { display: none; }
     .titlebar { padding: 0.5rem 0.6rem; }
     .chrome-btn { padding: 0.3rem 0.45rem; font-size: 11px; }
+    /* Five buttons on a phone's titlebar is already tight. The face shrinks with
+       the text rather than pushing "pause" off the end of the row. */
+    .chrome-btn--face { padding: 0.14rem 0.45rem 0.14rem 0.28rem; }
+    .avatar { width: 15px; height: 15px; }
     .credit { text-align: center; }
 }
 

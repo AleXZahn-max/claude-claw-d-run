@@ -34,8 +34,17 @@
 
             <div class="chrome-actions">
                 <!-- Reads "…" until /api/me answers, then "sign in", "guest" on a
-                     deploy with no OAuth App, or "@login" once you are somebody. -->
-                <button type="button" id="authBtn" class="chrome-btn">…</button>
+                     deploy with no OAuth App, or "@login" once you are somebody.
+
+                     The face is github.com/<login>.png — the login *is* the URL,
+                     so there is nothing to fetch, store or invalidate. It starts
+                     hidden and stays hidden for anyone who is not signed in, and
+                     for a request that never arrives. -->
+                <button type="button" id="authBtn" class="chrome-btn chrome-btn--auth">
+                    <img id="authAvatar" class="avatar" alt="" width="18" height="18"
+                         decoding="async" referrerpolicy="no-referrer" hidden>
+                    <span id="authLabel">…</span>
+                </button>
                 <button type="button" id="boardBtn" class="chrome-btn">board</button>
                 <button type="button" id="soundBtn" class="chrome-btn">sound: on</button>
                 <button type="button" id="themeBtn" class="chrome-btn">theme: dark</button>

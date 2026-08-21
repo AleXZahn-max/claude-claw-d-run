@@ -111,6 +111,7 @@ class Game {
         this.notice = AUTH.notice;
         this.signOutAt = 0;
         this.authLabel = '';
+        this.authFace = '';
         AUTH.probe().then(() => this.applyIdentity());
 
         this.reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -569,7 +570,7 @@ class Game {
     }
 
     /**
-     * Keeps the titlebar button labelled with the truth.
+     * Keeps the titlebar button labelled — and faced — with the truth.
      *
      * Called from `draw`, every frame, which is affordable because it writes to the
      * DOM only when the label actually changes — and it has to be every frame,
@@ -587,10 +588,51 @@ class Game {
 
         if (label !== this.authLabel) {
             this.authLabel = label;
-            el.textContent = label;
+            const text = document.getElementById('authLabel');
+            if (text) text.textContent = label;
             el.classList.toggle('chrome-btn--on', AUTH.member && label[0] === '@');
             el.disabled = AUTH.state === 'unknown';
         }
+
+        this.syncAvatar(el);
+    }
+
+    /**
+     * Puts the player's github face next to their name.
+     *
+     * github.com/<login>.png is the whole of it: the login *is* the URL, so there
+     * is no avatar field to fetch, cache, or watch go stale when somebody changes
+     * their picture. The browser's own image cache is the only cache involved.
+     *
+     * Guarded on the login rather than on the label, so arming a sign-out — which
+     * does change the label — does not throw the image away and fetch it again a
+     * second later. And it survives failure quietly: a 404, a blocked request, or
+     * a deploy someone is reading over dodgy hotel wifi hides the element rather
+     * than leaving a broken-image glyph in the titlebar.
+     */
+    syncAvatar(el) {
+        const img = document.getElementById('authAvatar');
+        if (!img) return;
+
+        const login = AUTH.member ? AUTH.login : '';
+        if (login === this.authFace) return;
+        this.authFace = login;
+
+        el.classList.toggle('chrome-btn--face', !!login);
+        if (!login) {
+            img.hidden = true;
+            img.removeAttribute('src');
+            return;
+        }
+
+        img.onerror = () => {
+            img.hidden = true;
+            el.classList.remove('chrome-btn--face');
+        };
+        // 18px on the glass, so ask for 2x and let github do the scaling — the
+        // unsized original is a 460px png for a hole the size of one character.
+        img.src = `https://github.com/${encodeURIComponent(login)}.png?size=40`;
+        img.hidden = false;
     }
 
     openProfile() {

@@ -122,6 +122,12 @@ Nothing in the game requires it. There is no wall, no modal, and no dark pattern
 where the score you just earned is held hostage. A guest's death screen says
 where the run went and offers `g`; that is the whole of the pressure.
 
+Once you are in, the titlebar button becomes your face and your handle:
+`github.com/<login>.png`, ringed in the same coral as the process dot beside it.
+No avatar URL is stored anywhere — the login *is* the URL, so there is nothing to
+keep in sync when you change your picture, and nothing to show when the request
+fails except the button you already had.
+
 ### Setting it up
 
 1. **Create the OAuth App.** github.com → Settings → Developer settings → OAuth
